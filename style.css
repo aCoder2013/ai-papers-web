@@ -40,7 +40,7 @@ html, body {
 }
 
 .container {
-  max-width: 960px;
+  max-width: 1040px;
   margin: 0 auto;
   padding: 0 20px;
 }
@@ -135,6 +135,45 @@ html, body {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(20, 24, 38, 0.06), 0 8px 24px rgba(20, 24, 38, 0.08);
 }
+
+/* At-a-glance gist (zh preferred) */
+.paper-gist-block {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  border: 1px solid var(--border);
+}
+.paper-gist-zh {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.55;
+  color: var(--text);
+}
+.paper-gist-hint {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.paper-gist-en {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.paper-title-en {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: -4px 0 10px;
+}
+
 .paper-title {
   margin: 0 0 8px;
   font-size: 17px;
@@ -177,28 +216,33 @@ html, body {
   color: var(--text-muted);
   margin-bottom: 10px;
 }
-.paper-abstract {
+
+.paper-details {
+  margin: 10px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--surface);
+}
+.paper-details summary {
+  cursor: pointer;
+  padding: 10px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  list-style: none;
+}
+.paper-details summary::-webkit-details-marker { display: none; }
+.paper-details[open] summary {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.paper-abstract-text {
   font-size: 14px;
   color: var(--text);
   line-height: 1.65;
   margin: 0 0 12px;
 }
-.paper-abstract.collapsed {
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.toggle-abstract {
-  background: none;
-  border: none;
-  color: var(--primary);
-  font-size: 13px;
-  cursor: pointer;
-  padding: 0;
-  margin-right: 12px;
-}
-.toggle-abstract:hover { text-decoration: underline; }
 
 .paper-links {
   display: flex;

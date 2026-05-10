@@ -1,12 +1,15 @@
-// AI Papers viewer — daily / weekly views
-// Mock data lives at ./data/papers.json (object keyed by YYYY-MM-DD).
+// AI Papers viewer — daily / weekly views, bilingual (EN + optional zh overlay)
+// Main data: ./data/papers.json  { 'YYYY-MM-DD': Paper[] }
+// Chinese overlay: ./data/papers.zh.json  { 'YYYY-MM-DD': { 'arxiv_id': { title_zh, gist_zh, abstract_zh } } }
 
 const DATA_URL = './data/papers.json';
+const ZH_URL = './data/papers.zh.json';
 
 const state = {
-  data: null,            // { 'YYYY-MM-DD': Paper[] }
-  dates: [],             // sorted ascending
-  weeks: [],             // [{ key, label, days: ['YYYY-MM-DD',...] }]
+  data: null,
+  zh: null,
+  dates: [],
+  weeks: [],
 };
 
 document.addEventListener('DOMContentLoaded', init);
@@ -14,9 +17,17 @@ document.addEventListener('DOMContentLoaded', init);
 async function init() {
   bindTabs();
   try {
-    const res = await fetch(DATA_URL);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    state.data = await res.json();
+    const [dataRes, zhRes] = await Promise.all([
+      fetch(DATA_URL),
+      fetch(ZH_URL),
+    ]);
+    if (!dataRes.ok) throw new Error('papers.json HTTP ' + dataRes.status);
+    state.data = await dataRes.json();
+    if (zhRes.ok) {
+      state.zh = await zhRes.json();
+    } else {
+      state.zh = {};
+    }
   } catch (e) {
     document.getElementById('loading').textContent = '数据加载失败：' + e.message;
     return;
@@ -27,6 +38,36 @@ async function init() {
   document.getElementById('loading').remove();
   setupDailyView();
   setupWeeklyView();
+}
+
+function zhFor(date, arxivId) {
+  if (!state.zh || !arxivId) return null;
+  const byDay = state.zh[date];
+  if (!byDay || typeof byDay !== 'object') return null;
+  return byDay[arxivId] || null;
+}
+
+/** English one-sentence / lead for at-a-glance when zh missing */
+function englishGist(abstract) {
+  if (!abstract || typeof abstract !== 'string') return '';
+  const t = abstract.trim();
+  if (!t) return '';
+  const cut = t.split(/(?<=[.!?])\s+/)[0] || t.split('\n')[0] || t;
+  const max = 320;
+  return cut.length > max ? cut.slice(0, max).trim() + '…' : cut;
+}
+
+function mergePaper(date, p) {
+  const z = zhFor(date, p.arxiv_id);
+  const gistEn = englishGist(p.abstract_text);
+  return {
+    ...p,
+    _date: date,
+    _gist_en: gistEn,
+    title_zh: z?.title_zh || '',
+    gist_zh: z?.gist_zh || '',
+    abstract_zh: z?.abstract_zh || '',
+  };
 }
 
 /* ---------------- Tabs ---------------- */
@@ -44,7 +85,6 @@ function bindTabs() {
 /* ---------------- Daily ---------------- */
 function setupDailyView() {
   const select = document.getElementById('date-select');
-  // newest first in dropdown
   for (const d of [...state.dates].reverse()) {
     const opt = document.createElement('option');
     opt.value = d;
@@ -65,13 +105,12 @@ function renderDaily(date) {
     list.innerHTML = '<div class="empty">这一天没有数据</div>';
     return;
   }
-  for (const p of papers) list.appendChild(renderPaperCard(p));
+  for (const p of papers) list.appendChild(renderPaperCard(mergePaper(date, p)));
 }
 
 /* ---------------- Weekly ---------------- */
 function setupWeeklyView() {
   const select = document.getElementById('week-select');
-  // newest first
   for (const w of [...state.weeks].reverse()) {
     const opt = document.createElement('option');
     opt.value = w.key;
@@ -89,10 +128,14 @@ function renderWeekly(weekKey) {
   const allPapers = week.days.flatMap((d) => state.data[d] || []);
   document.getElementById('weekly-count').textContent = allPapers.length + ' 篇';
 
-  // summary card
   const summary = document.getElementById('weekly-summary');
   const authorSet = new Set();
   for (const p of allPapers) (p.authors || []).forEach((a) => authorSet.add(a));
+  const zhDays = week.days.filter((d) => {
+    const map = state.zh[d];
+    if (!map || typeof map !== 'object') return false;
+    return Object.keys(map).length > 0;
+  }).length;
   summary.innerHTML = `
     <h2>📊 本周概览（${week.label}）</h2>
     <div class="stats">
@@ -100,6 +143,7 @@ function renderWeekly(weekKey) {
       <div class="stat-card"><div class="num">${week.days.length}</div><div class="label">覆盖天数</div></div>
       <div class="stat-card"><div class="num">${authorSet.size}</div><div class="label">独立作者</div></div>
       <div class="stat-card"><div class="num">${avgPerDay(allPapers.length, week.days.length)}</div><div class="label">日均篇数</div></div>
+      <div class="stat-card"><div class="num">${zhDays}</div><div class="label">含中文 overlay 的天数</div></div>
     </div>
   `;
 
@@ -113,7 +157,7 @@ function renderWeekly(weekKey) {
     const h = document.createElement('h3');
     h.textContent = `${day} · ${papers.length} 篇`;
     section.appendChild(h);
-    for (const p of papers) section.appendChild(renderPaperCard(p));
+    for (const p of papers) section.appendChild(renderPaperCard(mergePaper(day, p)));
     list.appendChild(section);
   }
 }
@@ -128,15 +172,42 @@ function renderPaperCard(p) {
   const card = document.createElement('article');
   card.className = 'paper-card';
 
+  const gistWrap = document.createElement('div');
+  gistWrap.className = 'paper-gist-block';
+
+  if (p.gist_zh) {
+    const g = document.createElement('p');
+    g.className = 'paper-gist-zh';
+    g.textContent = p.gist_zh;
+    gistWrap.appendChild(g);
+  } else if (p._gist_en) {
+    const hint = document.createElement('span');
+    hint.className = 'paper-gist-hint';
+    hint.textContent = '暂无中文梗概 · 英文首句';
+    gistWrap.appendChild(hint);
+    const g = document.createElement('p');
+    g.className = 'paper-gist-en';
+    g.textContent = p._gist_en;
+    gistWrap.appendChild(g);
+  }
+  if (gistWrap.childNodes.length) card.appendChild(gistWrap);
+
   const title = document.createElement('h3');
   title.className = 'paper-title';
   const titleLink = document.createElement('a');
   titleLink.href = p.abs_url || ('https://arxiv.org/abs/' + (p.arxiv_id || ''));
   titleLink.target = '_blank';
   titleLink.rel = 'noopener';
-  titleLink.textContent = p.title || '(无标题)';
+  titleLink.textContent = p.title_zh || p.title || '(无标题)';
   title.appendChild(titleLink);
   card.appendChild(title);
+
+  if (p.title_zh && p.title && p.title !== p.title_zh) {
+    const sub = document.createElement('div');
+    sub.className = 'paper-title-en';
+    sub.textContent = p.title;
+    card.appendChild(sub);
+  }
 
   const meta = document.createElement('div');
   meta.className = 'paper-meta';
@@ -168,20 +239,31 @@ function renderPaperCard(p) {
     card.appendChild(authors);
   }
 
-  if (p.abstract_text) {
-    const abs = document.createElement('p');
-    abs.className = 'paper-abstract collapsed';
-    abs.textContent = p.abstract_text;
-    card.appendChild(abs);
+  if (p.abstract_zh) {
+    const det = document.createElement('details');
+    det.className = 'paper-details';
+    const sum = document.createElement('summary');
+    sum.textContent = '中文摘要';
+    det.appendChild(sum);
+    const absZh = document.createElement('p');
+    absZh.className = 'paper-abstract-text';
+    absZh.textContent = p.abstract_zh;
+    det.appendChild(absZh);
+    card.appendChild(det);
+  }
 
-    const toggle = document.createElement('button');
-    toggle.className = 'toggle-abstract';
-    toggle.textContent = '展开摘要';
-    toggle.addEventListener('click', () => {
-      const collapsed = abs.classList.toggle('collapsed');
-      toggle.textContent = collapsed ? '展开摘要' : '收起摘要';
-    });
-    card.appendChild(toggle);
+  if (p.abstract_text) {
+    const det = document.createElement('details');
+    det.className = 'paper-details';
+    if (!p.abstract_zh) det.open = true;
+    const sum = document.createElement('summary');
+    sum.textContent = p.abstract_zh ? '英文摘要（原文）' : '摘要（原文）';
+    det.appendChild(sum);
+    const abs = document.createElement('p');
+    abs.className = 'paper-abstract-text';
+    abs.textContent = p.abstract_text;
+    det.appendChild(abs);
+    card.appendChild(det);
   }
 
   const links = document.createElement('div');
@@ -208,7 +290,7 @@ function groupByWeek(dates) {
   for (const d of dates) {
     const dt = new Date(d + 'T00:00:00Z');
     const monday = new Date(dt);
-    const dow = (dt.getUTCDay() + 6) % 7; // 0 = Mon
+    const dow = (dt.getUTCDay() + 6) % 7;
     monday.setUTCDate(dt.getUTCDate() - dow);
     const sunday = new Date(monday);
     sunday.setUTCDate(monday.getUTCDate() + 6);
