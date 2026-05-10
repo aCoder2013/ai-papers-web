@@ -23,10 +23,8 @@ https://<你的用户名>.github.io/ai-papers-web/
 ├── index.html              # 入口
 ├── style.css               # 样式
 ├── app.js                  # 视图逻辑（原生 JS，无依赖）
-├── data/
-│   └── papers.json         # mock 数据（按日期聚合的论文列表）
-└── .github/workflows/
-    └── pages.yml           # GitHub Pages 自动部署
+└── data/
+    └── papers.json         # mock 数据（按日期聚合的论文列表）
 ```
 
 ## 数据格式
@@ -61,6 +59,9 @@ python3 -m http.server 8000
 
 ## 部署
 
-仓库 push 到 `main` 后，GitHub Actions 工作流（`.github/workflows/pages.yml`）会自动构建并部署到 GitHub Pages。
+本仓库使用 GitHub Pages 的 **「Deploy from a branch」** 模式：
 
-首次启用：仓库 → **Settings → Pages → Build and deployment → Source: GitHub Actions**。
+- Source: `main` 分支 / `/(root)` 目录
+- 每次 push 到 `main` 后，GitHub 会自动重建并发布站点（约 1～3 分钟）
+
+如需切换到 GitHub Actions 工作流（更灵活、可加构建步骤），新增 `.github/workflows/pages.yml` 并在 **Settings → Pages → Source** 选 **GitHub Actions** 即可。
