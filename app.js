@@ -1,8 +1,29 @@
-// Bookshelf-style AI papers library.
+// 面向中文用户的书架式 AI 论文浏览器。
 // Data: ./data/papers.json
 // AI review: ./data/analysis/YYYY-MM-DD.summary.md
 
 const DATA_URL = './data/papers.json';
+const TAG_LABELS = {
+  Agents: '智能体',
+  Benchmarks: '评测/基准',
+  Diffusion: '扩散模型',
+  RL: '强化学习',
+  Multimodal: '多模态',
+  'Long-context': '长上下文',
+  MoE: '专家模型',
+  Safety: '安全/对齐',
+  Systems: '系统/工程',
+  Math: '数学推理',
+  Tables: '表格数据',
+  Robotics: '机器人',
+  Geo: '遥感/地理',
+  Music: '音乐',
+  Bio: '生物医学',
+  NLP: '语言模型',
+  CV: '视觉',
+  ML: '机器学习',
+  Other: '其他',
+};
 
 const state = {
   data: {},
@@ -16,7 +37,7 @@ const state = {
 document.addEventListener('DOMContentLoaded', () => {
   init().catch((error) => {
     console.error(error);
-    setLoading(`Failed to render library: ${error.message}`);
+    setLoading(`渲染失败：${error.message}`);
   });
 });
 
@@ -26,7 +47,7 @@ async function init() {
     if (!res.ok) throw new Error(`papers.json HTTP ${res.status}`);
     state.data = await res.json();
   } catch (error) {
-    setLoading(`Failed to load data: ${error.message}`);
+    setLoading(`数据加载失败：${error.message}`);
     return;
   }
 
@@ -51,7 +72,7 @@ function setupControls() {
   for (const date of [...state.dates].reverse()) {
     const option = document.createElement('option');
     option.value = date;
-    option.textContent = `${date} (${getPapers(date).length})`;
+    option.textContent = `${date}（${getPapers(date).length} 篇）`;
     dateSelect.appendChild(option);
   }
   dateSelect.value = state.activeDate;
@@ -84,9 +105,10 @@ async function renderDate(date) {
   const tags = getTags(papers);
   state.activeTag = tags.includes(state.activeTag) ? state.activeTag : '';
 
-  document.getElementById('hero-date').textContent = date || 'No date';
-  document.getElementById('hero-count').textContent = `${papers.length} papers`;
-  document.getElementById('paper-count').textContent = `${papers.length} papers`;
+  document.getElementById('hero-date').textContent = date || '暂无日期';
+  document.getElementById('hero-date').textContent = date || '暂无日期';
+  document.getElementById('hero-count').textContent = `${papers.length} 篇论文`;
+  document.getElementById('paper-count').textContent = `${papers.length} 篇`;
 
   fillTagSelect(tags);
   renderTagChips(tags);
@@ -117,13 +139,13 @@ function fillTagSelect(tags) {
 
   const all = document.createElement('option');
   all.value = '';
-  all.textContent = 'All categories';
+  all.textContent = '全部主题';
   select.appendChild(all);
 
   for (const tag of tags) {
     const option = document.createElement('option');
     option.value = tag;
-    option.textContent = tag;
+    option.textContent = tagLabel(tag);
     select.appendChild(option);
   }
   select.value = state.activeTag;
@@ -138,7 +160,7 @@ function renderTagChips(tags) {
     const button = document.createElement('button');
     button.className = `tag-chip${state.activeTag === tag ? ' active' : ''}`;
     button.type = 'button';
-    button.textContent = `${tag} ${papers.filter((p) => p._tags.includes(tag)).length}`;
+    button.textContent = `${tagLabel(tag)} ${papers.filter((p) => p._tags.includes(tag)).length}`;
     button.addEventListener('click', () => {
       state.activeTag = tag;
       document.getElementById('tag-select').value = tag;
@@ -158,12 +180,12 @@ function renderShelves() {
   root.innerHTML = '';
 
   document.getElementById('shelf-title').textContent = state.activeTag
-    ? `${state.activeTag} shelf`
-    : 'Recommended shelves';
-  document.getElementById('paper-count').textContent = `${visible.length} papers`;
+    ? `${tagLabel(state.activeTag)}主题`
+    : '推荐主题';
+  document.getElementById('paper-count').textContent = `${visible.length} 篇`;
 
   if (!visible.length) {
-    root.innerHTML = '<div class="empty">No papers match this category.</div>';
+    root.innerHTML = '<div class="empty">这个主题下暂时没有论文。</div>';
     return;
   }
 
@@ -192,14 +214,14 @@ function renderShelf(tag, papers) {
   const titleWrap = document.createElement('div');
   const eyebrow = document.createElement('p');
   eyebrow.className = 'eyebrow';
-  eyebrow.textContent = 'Category';
+  eyebrow.textContent = '主题';
   const title = document.createElement('h3');
-  title.textContent = tag;
+  title.textContent = tagLabel(tag);
   titleWrap.append(eyebrow, title);
 
   const count = document.createElement('span');
   count.className = 'pill';
-  count.textContent = `${papers.length} shown`;
+  count.textContent = `展示 ${papers.length} 篇`;
   header.append(titleWrap, count);
   section.appendChild(header);
 
@@ -224,14 +246,14 @@ function renderBookCard(paper) {
   const cover = document.createElement('div');
   cover.className = `book-cover tone-${toneFor(paper._tags[0])}`;
   const label = document.createElement('span');
-  label.textContent = paper._tags[0] || 'AI';
+  label.textContent = tagLabel(paper._tags[0] || 'Other');
   const title = document.createElement('strong');
   title.textContent = paper.title || '(untitled)';
   cover.append(label, title);
 
   const gist = document.createElement('p');
   gist.className = 'book-gist';
-  gist.textContent = paper._gist || 'Open this paper to read the abstract and AI review.';
+  gist.textContent = paper._gist || '打开后可查看摘要、原文链接与 AI 中文点评。';
 
   const meta = document.createElement('div');
   meta.className = 'book-meta';
@@ -250,8 +272,8 @@ function renderReader(paper) {
     empty.className = 'reader-empty';
     empty.innerHTML = `
       <span class="book-icon">▰</span>
-      <h2>Pick a paper</h2>
-      <p>Click a book card on the shelf to open its abstract, authors, original links, PDF, and the Chinese AI review for the day.</p>
+      <h2>选择一篇论文</h2>
+      <p>点击书架上的论文卡片，打开摘要、作者、原文链接、PDF 与当天 AI 中文点评。</p>
     `;
     reader.appendChild(empty);
     return;
@@ -262,28 +284,28 @@ function renderReader(paper) {
 
   const left = document.createElement('section');
   left.className = 'page page-left';
-  left.appendChild(el('p', 'eyebrow', paper._tags.join(' / ')));
+  left.appendChild(el('p', 'eyebrow', paper._tags.map(tagLabel).join(' / ')));
   left.appendChild(el('h2', '', paper.title || '(untitled)'));
-  left.appendChild(el('p', 'lead', paper._gist || 'No short gist available.'));
+  left.appendChild(el('p', 'lead', paper._gist || '暂无一句话摘要。'));
 
   const author = el('p', 'reader-meta', compactAuthors(paper.authors, 12));
   left.appendChild(author);
 
   const links = document.createElement('div');
   links.className = 'reader-links';
-  if (paper.abs_url) links.appendChild(linkButton('Open original', paper.abs_url));
-  if (paper.pdf_url) links.appendChild(linkButton('Read PDF', paper.pdf_url));
+  if (paper.abs_url) links.appendChild(linkButton('打开原文', paper.abs_url));
+  if (paper.pdf_url) links.appendChild(linkButton('阅读 PDF', paper.pdf_url));
   left.appendChild(links);
 
   const right = document.createElement('section');
   right.className = 'page page-right';
-  right.appendChild(el('p', 'eyebrow', 'Abstract'));
-  right.appendChild(el('p', 'abstract-reader', paper._abstract || 'No abstract available.'));
+  right.appendChild(el('p', 'eyebrow', '论文摘要'));
+  right.appendChild(el('p', 'abstract-reader', paper._abstract || '暂无摘要。'));
 
   const review = state.reviewByDate[paper._date];
   const reviewBox = document.createElement('div');
   reviewBox.className = 'reader-review';
-  reviewBox.appendChild(el('p', 'eyebrow', 'AI Review / 中文点评'));
+  reviewBox.appendChild(el('p', 'eyebrow', 'AI 中文点评'));
   reviewBox.appendChild(el('p', '', review?.short || '这一天暂无 AI 总结。'));
   right.appendChild(reviewBox);
 
@@ -304,14 +326,14 @@ function linkButton(label, href) {
 async function renderReview(date) {
   const root = document.getElementById('review-highlights');
   const reviewLink = document.getElementById('review-link');
-  root.innerHTML = '<p class="muted">Loading AI review…</p>';
+  root.innerHTML = '<p class="muted">正在加载 AI 点评…</p>';
   reviewLink.href = `./data/analysis/${date}.summary.md`;
 
   const review = await loadReview(date);
   state.reviewByDate[date] = review;
 
   if (!review) {
-    root.innerHTML = '<p class="muted">No AI review for this date yet.</p>';
+    root.innerHTML = '<p class="muted">这一天暂无 AI 点评。</p>';
     return;
   }
 
@@ -420,9 +442,13 @@ function firstSentence(text) {
 }
 
 function compactAuthors(authors, limit = 3) {
-  if (!authors || !authors.length) return 'Unknown authors';
+  if (!authors || !authors.length) return '作者未知';
   const shown = authors.slice(0, limit).join(', ');
-  return authors.length > limit ? `${shown}, +${authors.length - limit} more` : shown;
+  return authors.length > limit ? `${shown}，等 ${authors.length} 人` : shown;
+}
+
+function tagLabel(tag) {
+  return TAG_LABELS[tag] || tag || '其他';
 }
 
 function toneFor(tag) {
