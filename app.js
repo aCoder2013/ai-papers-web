@@ -13,7 +13,12 @@ const state = {
   reviewByDate: {},
 };
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init().catch((error) => {
+    console.error(error);
+    setLoading(`Failed to render library: ${error.message}`);
+  });
+});
 
 async function init() {
   try {

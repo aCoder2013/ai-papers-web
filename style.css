@@ -132,7 +132,7 @@ a { color: inherit; }
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  background: rgba(255, 250, 241, 0.94);
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
 }
@@ -189,7 +189,7 @@ a { color: inherit; }
 .tag-chip:hover,
 .tag-chip.active {
   color: var(--primary-dark);
-  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  border-color: #cfa987;
   background: #fff3df;
 }
 
@@ -205,7 +205,7 @@ a { color: inherit; }
 .reader {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface) 96%, white);
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 
