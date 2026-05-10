@@ -14,6 +14,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -113,9 +114,9 @@ async function translateMyMemoryChunk(text) {
     'https://api.mymemory.translated.net/get?q=' +
     encodeURIComponent(q) +
     '&langpair=en|zh-CN';
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('MyMemory HTTP ' + res.status);
-  const j = await res.json();
+  // Some environments fail Node fetch() due to TLS/proxy cert chains while curl works.
+  const raw = execFileSync('curl', ['-sS', '-m', '20', url], { encoding: 'utf8' });
+  const j = JSON.parse(raw);
   if (j.responseStatus !== 200) {
     throw new Error(j.responseData?.error || 'MyMemory error');
   }
