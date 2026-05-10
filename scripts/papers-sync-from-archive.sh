@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 # Merge ai-papers-daily archive/<DATE>/papers.json into ai-papers-web data/papers.json.
-# Optional Chinese overlay for the static site: run
-#   node scripts/enrich-papers-zh.mjs --date YYYY-MM-DD
-# (writes data/papers.zh.json; OpenAI key recommended — see script header).
 # Usage:
 #   export AI_PAPERS_ARCHIVE=/path/to/archive   # required
 #   ./scripts/papers-sync-from-archive.sh [--push] [--date YYYY-MM-DD]...
