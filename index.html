@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 论文每日 / 每周视图</title>
+  <meta name="description" content="Hugging Face Daily Papers 的每日与每周浏览视图" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1>AI Papers</h1>
+      <p class="tagline">Hugging Face Daily Papers · 每日 / 每周浏览</p>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-view="daily" role="tab">每日</button>
+        <button class="tab" data-view="weekly" role="tab">每周</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Daily view -->
+    <section id="view-daily" class="view active">
+      <div class="toolbar">
+        <label for="date-select">选择日期：</label>
+        <select id="date-select" class="date-select"></select>
+        <span id="daily-count" class="meta-badge"></span>
+      </div>
+      <div id="daily-list" class="papers-list"></div>
+    </section>
+
+    <!-- Weekly view -->
+    <section id="view-weekly" class="view">
+      <div class="toolbar">
+        <label for="week-select">选择周：</label>
+        <select id="week-select" class="date-select"></select>
+        <span id="weekly-count" class="meta-badge"></span>
+      </div>
+
+      <div id="weekly-summary" class="weekly-summary"></div>
+      <div id="weekly-list" class="papers-list"></div>
+    </section>
+
+    <div id="loading" class="loading">数据加载中…</div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>
+        数据来自
+        <a href="https://huggingface.co/papers" target="_blank" rel="noopener">Hugging Face Daily Papers</a>
+        · 由
+        <a href="https://github.com/aCoder2013/ai-papers-daily" target="_blank" rel="noopener">ai-papers-daily</a>
+        生成 · 当前页面为静态视图（mock / 离线快照）
+      </p>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
