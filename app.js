@@ -32,9 +32,11 @@ const state = {
   activeTag: '',
   activePaper: null,
   reviewByDate: {},
+  reviewRawByDate: {}, // date -> full markdown string
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  setupReviewModal();
   init().catch((error) => {
     console.error(error);
     setLoading(`渲染失败：${error.message}`);
@@ -105,7 +107,6 @@ async function renderDate(date) {
   const tags = getTags(papers);
   state.activeTag = tags.includes(state.activeTag) ? state.activeTag : '';
 
-  document.getElementById('hero-date').textContent = date || '暂无日期';
   document.getElementById('hero-date').textContent = date || '暂无日期';
   document.getElementById('hero-count').textContent = `${papers.length} 篇论文`;
   document.getElementById('paper-count').textContent = `${papers.length} 篇`;
@@ -236,11 +237,14 @@ function renderBookCard(paper) {
   const button = document.createElement('button');
   button.className = 'book-card';
   button.type = 'button';
-  button.addEventListener('click', () => {
+  button.addEventListener('click', (e) => {
+    e.preventDefault();
     state.activePaper = paper;
     document.querySelectorAll('.book-card').forEach((card) => card.classList.remove('active'));
     button.classList.add('active');
     renderReader(paper);
+    const readerEl = document.getElementById('reader');
+    readerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   const cover = document.createElement('div');
@@ -273,11 +277,20 @@ function renderReader(paper) {
     empty.innerHTML = `
       <span class="book-icon">▰</span>
       <h2>选择一篇论文</h2>
-      <p>点击书架上的论文卡片，打开摘要、作者、原文链接、PDF 与当天 AI 中文点评。</p>
+      <p>点击书架上的论文卡片，打开 3D 书本阅读器，查看摘要、作者、原文链接、PDF 与当天 AI 中文点评。</p>
     `;
     reader.appendChild(empty);
     return;
   }
+
+  const scene = document.createElement('div');
+  scene.className = 'book-3d-scene';
+
+  const book3d = document.createElement('div');
+  book3d.className = 'book-3d';
+
+  const pagesWrap = document.createElement('div');
+  pagesWrap.className = 'book-3d-pages-wrap';
 
   const spread = document.createElement('div');
   spread.className = 'book-spread';
@@ -310,7 +323,36 @@ function renderReader(paper) {
   right.appendChild(reviewBox);
 
   spread.append(left, right);
-  reader.appendChild(spread);
+  pagesWrap.appendChild(spread);
+
+  const coverOverlay = document.createElement('div');
+  coverOverlay.className = 'book-3d-cover-overlay';
+  const face = document.createElement('div');
+  face.className = `book-3d-cover-face tone-${toneFor(paper._tags[0])}`;
+  const ribbon = document.createElement('span');
+  ribbon.className = 'book-3d-ribbon';
+  ribbon.textContent = tagLabel(paper._tags[0] || 'Other');
+  const coverTitle = document.createElement('h3');
+  coverTitle.className = 'book-3d-cover-title';
+  coverTitle.textContent = paper.title || '论文';
+  const spine = document.createElement('div');
+  spine.className = 'book-3d-spine';
+  face.append(spine, ribbon, coverTitle);
+
+  const hint = document.createElement('p');
+  hint.className = 'book-3d-hint';
+  hint.textContent = '封面已翻开 · 左侧为信息与链接，右侧为摘要与点评';
+  face.appendChild(hint);
+
+  coverOverlay.appendChild(face);
+
+  book3d.append(pagesWrap, coverOverlay);
+  scene.appendChild(book3d);
+  reader.appendChild(scene);
+
+  requestAnimationFrame(() => {
+    book3d.classList.add('book-3d--open');
+  });
 }
 
 function linkButton(label, href) {
@@ -325,16 +367,28 @@ function linkButton(label, href) {
 
 async function renderReview(date) {
   const root = document.getElementById('review-highlights');
-  const reviewLink = document.getElementById('review-link');
+  const fullBtn = document.getElementById('review-full-btn');
   root.innerHTML = '<p class="muted">正在加载 AI 点评…</p>';
-  reviewLink.href = `./data/analysis/${date}.summary.md`;
+  if (fullBtn) {
+    fullBtn.disabled = true;
+    fullBtn.onclick = null;
+  }
 
   const review = await loadReview(date);
   state.reviewByDate[date] = review;
 
   if (!review) {
     root.innerHTML = '<p class="muted">这一天暂无 AI 点评。</p>';
+    if (fullBtn) {
+      fullBtn.disabled = true;
+      fullBtn.onclick = null;
+    }
     return;
+  }
+
+  if (fullBtn) {
+    fullBtn.disabled = !state.reviewRawByDate[date];
+    fullBtn.onclick = () => openReviewModal(date);
   }
 
   root.innerHTML = '';
@@ -352,14 +406,137 @@ async function renderReview(date) {
   root.appendChild(list);
 }
 
+function setupReviewModal() {
+  const modal = document.getElementById('review-modal');
+  if (!modal) return;
+  modal.querySelectorAll('[data-close-modal]').forEach((el) => {
+    el.addEventListener('click', () => closeReviewModal());
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.hidden) closeReviewModal();
+  });
+}
+
+function openReviewModal(date) {
+  const modal = document.getElementById('review-modal');
+  const body = document.getElementById('review-modal-body');
+  const raw = state.reviewRawByDate[date];
+  if (!modal || !body) return;
+  if (!raw) {
+    body.innerHTML = '<p class="muted">暂无 Markdown 原文可展示。</p>';
+  } else {
+    body.innerHTML = '';
+    body.appendChild(renderMarkdownDom(stripArxivSection(raw)));
+  }
+  const title = document.getElementById('review-modal-title');
+  if (title) title.textContent = `当日 AI 中文点评 · ${date}`;
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeReviewModal() {
+  const modal = document.getElementById('review-modal');
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function stripArxivSection(md) {
+  const lines = md.split(/\r?\n/);
+  const out = [];
+  for (const line of lines) {
+    if (/^##\s+覆盖的\s+arxiv_id/i.test(line)) break;
+    if (/^以下自\s+\*\*.*arxiv_id/i.test(line)) break;
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+/** 将 Markdown 转为 DOM（安全：不注入 HTML，仅处理标题/列表/段落与 **加粗**） */
+function renderMarkdownDom(md) {
+  const root = document.createElement('div');
+  root.className = 'md';
+  const lines = md.split(/\r?\n/);
+  let i = 0;
+
+  const flushParagraph = (buf) => {
+    const text = buf.join(' ').trim();
+    if (!text) return;
+    const p = document.createElement('p');
+    appendWithBold(p, text);
+    root.appendChild(p);
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      i++;
+      continue;
+    }
+
+    if (/^#{1,6}\s+/.test(trimmed)) {
+      const level = Math.min(6, (trimmed.match(/^#+/) || [''])[0].length);
+      const h = document.createElement(`h${level}`);
+      const titleText = trimmed.replace(/^#{1,6}\s+/, '');
+      appendWithBold(h, titleText);
+      root.appendChild(h);
+      i++;
+      continue;
+    }
+
+    if (/^\s*[-*]\s+/.test(line)) {
+      const ul = document.createElement('ul');
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        const li = document.createElement('li');
+        const item = lines[i].replace(/^\s*[-*]\s+/, '');
+        appendWithBold(li, item);
+        ul.appendChild(li);
+        i++;
+      }
+      root.appendChild(ul);
+      continue;
+    }
+
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !/^#{1,6}\s+/.test(lines[i].trim()) && !/^\s*[-*]\s+/.test(lines[i])) {
+      para.push(lines[i].trim());
+      i++;
+    }
+    flushParagraph(para);
+  }
+
+  return root;
+}
+
+function appendWithBold(container, text) {
+  const parts = String(text).split(/\*\*/);
+  for (let i = 0; i < parts.length; i++) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const s = document.createElement('strong');
+      s.textContent = parts[i];
+      container.appendChild(s);
+    } else {
+      container.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
 async function loadReview(date) {
   const url = `./data/analysis/${date}.summary.md`;
   try {
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      delete state.reviewRawByDate[date];
+      return null;
+    }
     const md = await res.text();
+    state.reviewRawByDate[date] = md;
     return parseReview(md);
   } catch {
+    delete state.reviewRawByDate[date];
     return null;
   }
 }

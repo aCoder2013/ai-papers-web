@@ -353,7 +353,7 @@ a { color: inherit; }
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "PingFang SC", "Microsoft YaHei", Inter, ui-sans-serif, system-ui, sans-serif;
   font-size: 17px;
   line-height: 1.22;
 }
@@ -387,7 +387,7 @@ a { color: inherit; }
 .reader {
   grid-column: 1 / -1;
   min-height: 460px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .reader-empty {
@@ -410,6 +410,113 @@ a { color: inherit; }
   color: transparent;
   background: linear-gradient(135deg, var(--primary), #df9853);
   box-shadow: inset 10px 0 0 rgba(255, 255, 255, 0.16);
+}
+
+/* —— 3D 书本阅读器 —— */
+.book-3d-scene {
+  perspective: 1600px;
+  perspective-origin: 42% 42%;
+  padding: 12px 8px 28px;
+}
+
+.book-3d {
+  position: relative;
+  transform-style: preserve-3d;
+  max-width: 1120px;
+  margin: 0 auto;
+  min-height: min(520px, 72vh);
+}
+
+.book-3d-pages-wrap {
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  min-height: min(520px, 72vh);
+  background: var(--surface);
+}
+
+.book-3d-cover-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(44%, 402px);
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transition: transform 0.88s cubic-bezier(0.25, 0.82, 0.22, 1);
+  z-index: 8;
+  pointer-events: none;
+  filter: drop-shadow(12px 16px 28px rgba(36, 23, 15, 0.35));
+}
+
+.book-3d--open .book-3d-cover-overlay {
+  transform: rotateY(-76deg);
+}
+
+.book-3d-cover-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px 20px 20px 6px;
+  padding: 24px 20px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  box-shadow:
+    inset 16px 0 0 rgba(255, 255, 255, 0.14),
+    inset -2px 0 0 rgba(0, 0, 0, 0.2);
+}
+
+.book-3d-spine {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 16px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.4), rgba(255, 255, 255, 0.06));
+}
+
+.book-3d-ribbon {
+  align-self: flex-start;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.book-3d-cover-title {
+  margin: 0;
+  font-family: "PingFang SC", "Microsoft YaHei", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(17px, 1.65vw, 24px);
+  line-height: 1.32;
+  color: #fff;
+  text-shadow: 0 3px 18px rgba(0, 0, 0, 0.35);
+  display: -webkit-box;
+  -webkit-line-clamp: 7;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.book-3d-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-3d-cover-overlay {
+    transition: none;
+  }
+  .book-3d--open .book-3d-cover-overlay {
+    transform: rotateY(-82deg);
+  }
 }
 
 .book-spread {
@@ -508,6 +615,129 @@ a { color: inherit; }
 
 .muted { color: var(--muted); }
 
+.text-link-btn {
+  display: inline-flex;
+  margin-top: 16px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.text-link-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.review-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.review-modal[hidden] {
+  display: none;
+}
+
+.review-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(28, 18, 12, 0.55);
+  backdrop-filter: blur(5px);
+}
+
+.review-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(760px, 100%);
+  max-height: min(90vh, 940px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.review-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #fff8ec, var(--surface));
+}
+
+.review-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.review-modal-close {
+  border: none;
+  background: #f2e2c8;
+  color: var(--primary-dark);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.review-modal-close:hover {
+  filter: brightness(0.97);
+}
+
+.review-modal-body {
+  padding: 20px 22px 26px;
+  overflow: auto;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.review-modal-body.md h1 {
+  font-size: 1.45rem;
+  margin: 18px 0 8px;
+}
+
+.review-modal-body.md h2 {
+  font-size: 1.22rem;
+  margin: 16px 0 8px;
+}
+
+.review-modal-body.md h3 {
+  font-size: 1.08rem;
+  margin: 14px 0 6px;
+}
+
+.review-modal-body.md ul {
+  margin: 8px 0 12px 20px;
+  padding: 0;
+}
+
+.review-modal-body.md li {
+  margin: 8px 0;
+}
+
+.review-modal-body.md p {
+  margin: 10px 0;
+}
+
 .site-footer {
   border-top: 1px solid var(--border);
   padding: 22px 0;
@@ -538,6 +768,18 @@ a { color: inherit; }
 }
 
 @media (max-width: 780px) {
+  .book-3d-scene {
+    perspective: none;
+  }
+  .book-3d-cover-overlay {
+    display: none;
+  }
+  .book-3d {
+    min-height: auto;
+  }
+  .book-3d-pages-wrap {
+    min-height: auto;
+  }
   .container { width: min(100% - 24px, 1480px); }
 
   .hero-inner,

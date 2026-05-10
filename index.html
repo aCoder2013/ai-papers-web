@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI 论文书架</title>
   <meta name="description" content="面向中文用户的 AI 论文书架：按标签浏览，查看原文、PDF、摘要与 AI 中文点评。" />
-  <link rel="stylesheet" href="./style.css?v=20260510-cn-reader-1" />
+  <link rel="stylesheet" href="./style.css?v=20260511-book3d-1" />
 </head>
 <body>
   <header class="hero">
@@ -50,7 +50,7 @@
         <div id="review-highlights" class="review-highlights">
           <p class="muted">正在加载 AI 点评…</p>
         </div>
-        <a id="review-link" class="text-link" href="#" target="_blank" rel="noopener">查看完整点评</a>
+        <button type="button" id="review-full-btn" class="text-link-btn">查看完整点评</button>
       </aside>
 
       <section class="shelves-area" aria-label="论文书架">
@@ -76,6 +76,17 @@
     <div id="loading" class="loading">正在加载论文书架…</div>
   </main>
 
+  <div id="review-modal" class="review-modal" hidden aria-hidden="true">
+    <div class="review-modal-backdrop" data-close-modal></div>
+    <div class="review-modal-panel" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+      <header class="review-modal-header">
+        <h2 id="review-modal-title">当日 AI 中文点评</h2>
+        <button type="button" class="review-modal-close" data-close-modal aria-label="关闭">×</button>
+      </header>
+      <div id="review-modal-body" class="review-modal-body md"></div>
+    </div>
+  </div>
+
   <footer class="site-footer">
     <div class="container">
       <p>
@@ -88,6 +99,6 @@
     </div>
   </footer>
 
-  <script src="./app.js?v=20260510-cn-reader-1"></script>
+  <script src="./app.js?v=20260511-book3d-1"></script>
 </body>
 </html>
