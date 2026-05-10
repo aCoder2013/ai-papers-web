@@ -5,15 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI 论文书架</title>
   <meta name="description" content="面向中文用户的 AI 论文书架：按标签浏览，查看原文、PDF、摘要与 AI 中文点评。" />
-  <link rel="stylesheet" href="./style.css?v=20260511-book3d-1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css?v=20260514-bookstore-bright" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
 </head>
 <body>
+  <div id="library-atmosphere" class="library-atmosphere" aria-hidden="true">
+    <canvas id="library-canvas" class="library-atmosphere-canvas"></canvas>
+    <div class="library-atmosphere-veil"></div>
+  </div>
+
+  <div id="library-look-hud" class="library-look-hud" aria-live="polite">
+    <div class="library-look-crosshair" aria-hidden="true"></div>
+    <div class="library-look-card">
+      <p class="library-look-eyebrow"></p>
+      <p class="library-look-title"></p>
+      <p class="library-look-gist"></p>
+      <p class="library-look-hint">单击打开详情 · Esc 关闭抽屉</p>
+    </div>
+  </div>
+
   <header class="hero">
     <div class="container hero-inner">
       <div>
         <p class="eyebrow">Hugging Face 每日论文</p>
         <h1>AI 论文书架</h1>
-        <p class="tagline">像逛书店一样浏览每日论文：先按主题扫一眼，再打开论文查看摘要、原文链接、PDF 与 AI 中文点评。</p>
+        <p class="tagline">桌面端默认进入<strong>可探索的 3D 图书馆</strong>：拖动旋转视角，准星对准书脊可预览标题，点击打开论文详情；「论文列表」「当日导读」在顶栏。无 WebGL 时自动为经典列表布局。</p>
       </div>
       <div class="hero-card" aria-label="站点概览">
         <span id="hero-date">加载中</span>
@@ -24,7 +50,12 @@
   </header>
 
   <main class="container app-shell">
-    <section class="controls" aria-label="论文筛选">
+    <section class="controls controls-bar" aria-label="论文筛选">
+      <div class="controls-leading">
+        <span class="explorer-brand" aria-hidden="true">3D 图书馆</span>
+        <span id="explorer-paper-pill" class="pill explorer-paper-pill" title="当前列表论文数"></span>
+      </div>
+      <div class="controls-filters">
       <label>
         <span>日期</span>
         <select id="date-select"></select>
@@ -34,25 +65,30 @@
         <select id="tag-select"></select>
       </label>
       <button id="all-button" type="button">全部论文</button>
+      </div>
+      <div class="controls-explorer-actions" aria-label="探索模式辅助">
+        <button type="button" id="explorer-list-btn" class="ghost-btn">论文列表</button>
+        <button type="button" id="explorer-review-btn" class="ghost-btn">当日导读</button>
+      </div>
     </section>
+
+    <aside class="curator-panel" aria-label="AI 中文点评">
+      <div class="panel-heading">
+        <span class="book-dot"></span>
+        <div>
+          <p class="eyebrow">AI 点评</p>
+          <h2>中文点评</h2>
+        </div>
+      </div>
+      <div id="review-highlights" class="review-highlights">
+        <p class="muted">正在加载 AI 点评…</p>
+      </div>
+      <button type="button" id="review-full-btn" class="text-link-btn">查看完整点评</button>
+    </aside>
 
     <section id="tag-shelf" class="tag-shelf" aria-label="热门主题"></section>
 
     <section class="library-grid">
-      <aside class="curator-panel" aria-label="AI 中文点评">
-        <div class="panel-heading">
-          <span class="book-dot"></span>
-          <div>
-            <p class="eyebrow">AI 点评</p>
-            <h2>中文点评</h2>
-          </div>
-        </div>
-        <div id="review-highlights" class="review-highlights">
-          <p class="muted">正在加载 AI 点评…</p>
-        </div>
-        <button type="button" id="review-full-btn" class="text-link-btn">查看完整点评</button>
-      </aside>
-
       <section class="shelves-area" aria-label="论文书架">
         <div class="section-title">
           <div>
@@ -63,18 +99,30 @@
         </div>
         <div id="shelves" class="shelves"></div>
       </section>
-
-      <article id="reader" class="reader" aria-live="polite">
-        <div class="reader-empty">
-          <span class="book-icon">▰</span>
-          <h2>选择一篇论文</h2>
-          <p>点击书架上的论文卡片，打开摘要、作者、原文链接、PDF 和当天 AI 中文点评。</p>
-        </div>
-      </article>
     </section>
+
+    <div id="explorer-list-scrim" class="explorer-list-scrim" aria-hidden="true"></div>
 
     <div id="loading" class="loading">正在加载论文书架…</div>
   </main>
+
+  <div id="paper-drawer" class="paper-drawer" hidden aria-hidden="true">
+    <div class="paper-drawer-backdrop" data-close-paper-drawer></div>
+    <div
+      id="paper-drawer-panel"
+      class="paper-drawer-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="paper-drawer-title"
+      tabindex="-1"
+    >
+      <header class="paper-drawer-header">
+        <h2 id="paper-drawer-title" class="paper-drawer-title">论文详情</h2>
+        <button type="button" class="paper-drawer-close" data-close-paper-drawer aria-label="关闭详情">×</button>
+      </header>
+      <div id="paper-drawer-body" class="paper-drawer-body" aria-live="polite"></div>
+    </div>
+  </div>
 
   <div id="review-modal" class="review-modal" hidden aria-hidden="true">
     <div class="review-modal-backdrop" data-close-modal></div>
@@ -99,6 +147,7 @@
     </div>
   </footer>
 
-  <script src="./app.js?v=20260511-book3d-1"></script>
+  <script type="module" src="./library-scene.js?v=20260514-bookstore-bright"></script>
+  <script src="./app.js?v=20260514-bookstore-bright"></script>
 </body>
 </html>

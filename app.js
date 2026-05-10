@@ -1,8 +1,42 @@
 // 面向中文用户的书架式 AI 论文浏览器。
 // Data: ./data/papers.json
-// AI review: ./data/analysis/YYYY-MM-DD.summary.md
+// 当日总览 AI 点评: ./data/analysis/YYYY-MM-DD.summary.md
+// 单篇点评（可选）: ./data/reviews/YYYY-MM-DD.json → reviews[stablePaperId]，由 scripts/generate-paper-reviews.mjs export/merge 生成（无第三方 API）
+// 背景层：library-scene.js 会尝试挂上 window.libraryAtmosphere；若你大幅改动布局需同步 WebGL 尺寸，可调用 libraryAtmosphere?.resize()（默认已监听 window resize）。
 
 const DATA_URL = './data/papers.json';
+
+function normalizeArxivId(id) {
+  return String(id || '')
+    .trim()
+    .replace(/^arxiv:/i, '')
+    .replace(/\.pdf$/i, '');
+}
+
+function extractArxivFromUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  const m = url.match(/arxiv\.org\/(?:abs|pdf)\/([^/?#]+)/i);
+  return m ? normalizeArxivId(m[1]) : '';
+}
+
+function hashTitleKey(title) {
+  const s = String(title || '').trim();
+  if (!s) return '';
+  let h = 5381 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return `title:${h.toString(16)}`;
+}
+
+/** 与 scripts/generate-paper-reviews.mjs 中 stablePaperId 保持一致 */
+function stablePaperId(paper) {
+  const raw = normalizeArxivId(paper.arxiv_id);
+  if (raw) return raw;
+  const u = extractArxivFromUrl(paper.abs_url) || extractArxivFromUrl(paper.pdf_url);
+  if (u) return u;
+  return hashTitleKey(paper.title);
+}
 const TAG_LABELS = {
   Agents: '智能体',
   Benchmarks: '评测/基准',
@@ -33,10 +67,27 @@ const state = {
   activePaper: null,
   reviewByDate: {},
   reviewRawByDate: {}, // date -> full markdown string
+  paperReviewsByDate: {}, // date -> { [arxiv_id]: zh text }
 };
 
+function setupExplorerChrome() {
+  document.getElementById('explorer-list-btn')?.addEventListener('click', () => {
+    document.documentElement.classList.toggle('explorer-list-open');
+  });
+  document.getElementById('explorer-list-scrim')?.addEventListener('click', () => {
+    document.documentElement.classList.remove('explorer-list-open');
+  });
+  document.getElementById('explorer-review-btn')?.addEventListener('click', () => {
+    openReviewModal(state.activeDate);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  setupExplorerChrome();
   setupReviewModal();
+  setupPaperDrawer();
+  window.addEventListener('library-atmosphere-ready', syncLibrary3D);
+  window.addEventListener('library-paper-select', onLibraryPaperSelectFrom3D);
   init().catch((error) => {
     console.error(error);
     setLoading(`渲染失败：${error.message}`);
@@ -115,7 +166,27 @@ async function renderDate(date) {
   renderTagChips(tags);
   renderShelves();
   renderReader(null);
-  await renderReview(date);
+  await Promise.all([renderReview(date), loadPaperReviews(date)]);
+}
+
+function syncLibrary3D() {
+  const setPapers = window.libraryAtmosphere?.setPapers;
+  if (typeof setPapers !== 'function') return;
+  const all = getPapers(state.activeDate);
+  const visible = state.activeTag ? all.filter((p) => p._tags.includes(state.activeTag)) : all;
+  setPapers(visible);
+}
+
+function onLibraryPaperSelectFrom3D(ev) {
+  const paper = ev.detail?.paper;
+  if (!paper) return;
+  state.activePaper = paper;
+  const sid = stablePaperId(paper);
+  document.querySelectorAll('.book-card').forEach((c) => {
+    c.classList.toggle('active', c.dataset.paperId === sid);
+  });
+  renderReader(paper);
+  focusPaperDrawer();
 }
 
 function getPapers(date) {
@@ -184,14 +255,18 @@ function renderShelves() {
     ? `${tagLabel(state.activeTag)}主题`
     : '推荐主题';
   document.getElementById('paper-count').textContent = `${visible.length} 篇`;
+  const expPill = document.getElementById('explorer-paper-pill');
+  if (expPill) expPill.textContent = `${visible.length} 篇`;
 
   if (!visible.length) {
     root.innerHTML = '<div class="empty">这个主题下暂时没有论文。</div>';
+    syncLibrary3D();
     return;
   }
 
   if (state.activeTag) {
     root.appendChild(renderShelf(state.activeTag, visible));
+    syncLibrary3D();
     return;
   }
 
@@ -203,6 +278,7 @@ function renderShelves() {
   for (const tag of shelfOrder) {
     root.appendChild(renderShelf(tag, grouped[tag].slice(0, 12)));
   }
+  syncLibrary3D();
 }
 
 function renderShelf(tag, papers) {
@@ -237,14 +313,14 @@ function renderBookCard(paper) {
   const button = document.createElement('button');
   button.className = 'book-card';
   button.type = 'button';
+  button.dataset.paperId = stablePaperId(paper);
   button.addEventListener('click', (e) => {
     e.preventDefault();
     state.activePaper = paper;
     document.querySelectorAll('.book-card').forEach((card) => card.classList.remove('active'));
     button.classList.add('active');
     renderReader(paper);
-    const readerEl = document.getElementById('reader');
-    readerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    focusPaperDrawer();
   });
 
   const cover = document.createElement('div');
@@ -268,91 +344,99 @@ function renderBookCard(paper) {
 }
 
 function renderReader(paper) {
-  const reader = document.getElementById('reader');
-  reader.innerHTML = '';
+  const reader = document.getElementById('paper-drawer-body');
+  const titleEl = document.getElementById('paper-drawer-title');
+  if (!reader) return;
 
   if (!paper) {
-    const empty = document.createElement('div');
-    empty.className = 'reader-empty';
-    empty.innerHTML = `
-      <span class="book-icon">▰</span>
-      <h2>选择一篇论文</h2>
-      <p>点击书架上的论文卡片，打开 3D 书本阅读器，查看摘要、作者、原文链接、PDF 与当天 AI 中文点评。</p>
-    `;
-    reader.appendChild(empty);
+    closePaperDrawer();
     return;
   }
 
-  const scene = document.createElement('div');
-  scene.className = 'book-3d-scene';
+  if (titleEl) titleEl.textContent = paper.title || '（无标题）';
+  reader.innerHTML = '';
 
-  const book3d = document.createElement('div');
-  book3d.className = 'book-3d';
+  const root = document.createElement('div');
+  root.className = 'detail-root';
 
-  const pagesWrap = document.createElement('div');
-  pagesWrap.className = 'book-3d-pages-wrap';
+  const header = document.createElement('header');
+  header.className = 'detail-header';
 
-  const spread = document.createElement('div');
-  spread.className = 'book-spread';
+  const tagsRow = document.createElement('div');
+  tagsRow.className = 'detail-tags';
+  for (const t of paper._tags) {
+    const pill = document.createElement('span');
+    pill.className = 'detail-tag-pill';
+    pill.textContent = tagLabel(t);
+    tagsRow.appendChild(pill);
+  }
+  header.appendChild(tagsRow);
 
-  const left = document.createElement('section');
-  left.className = 'page page-left';
-  left.appendChild(el('p', 'eyebrow', paper._tags.map(tagLabel).join(' / ')));
-  left.appendChild(el('h2', '', paper.title || '(untitled)'));
-  left.appendChild(el('p', 'lead', paper._gist || '暂无一句话摘要。'));
+  const gist = document.createElement('p');
+  gist.className = 'detail-gist';
+  gist.textContent = paper._gist || '暂无一句话梗概。';
+  header.appendChild(gist);
 
-  const author = el('p', 'reader-meta', compactAuthors(paper.authors, 12));
-  left.appendChild(author);
+  const authors = document.createElement('p');
+  authors.className = 'detail-authors';
+  authors.textContent = compactAuthors(paper.authors, 12);
+  header.appendChild(authors);
 
-  const links = document.createElement('div');
-  links.className = 'reader-links';
-  if (paper.abs_url) links.appendChild(linkButton('打开原文', paper.abs_url));
-  if (paper.pdf_url) links.appendChild(linkButton('阅读 PDF', paper.pdf_url));
-  left.appendChild(links);
+  const actions = document.createElement('div');
+  actions.className = 'detail-actions';
+  if (paper.abs_url) actions.appendChild(linkButton('打开原文', paper.abs_url));
+  if (paper.pdf_url) actions.appendChild(linkButton('阅读 PDF', paper.pdf_url));
+  header.appendChild(actions);
 
-  const right = document.createElement('section');
-  right.className = 'page page-right';
-  right.appendChild(el('p', 'eyebrow', '论文摘要'));
-  right.appendChild(el('p', 'abstract-reader', paper._abstract || '暂无摘要。'));
+  root.appendChild(header);
+
+  const secAbs = document.createElement('section');
+  secAbs.className = 'detail-section';
+  secAbs.appendChild(el('h3', 'detail-section-title', '摘要'));
+  const absP = document.createElement('p');
+  absP.className = 'detail-abstract';
+  absP.textContent = paper._abstract || '暂无摘要。';
+  secAbs.appendChild(absP);
+  root.appendChild(secAbs);
 
   const review = state.reviewByDate[paper._date];
-  const reviewBox = document.createElement('div');
-  reviewBox.className = 'reader-review';
-  reviewBox.appendChild(el('p', 'eyebrow', 'AI 中文点评'));
-  reviewBox.appendChild(el('p', '', review?.short || '这一天暂无 AI 总结。'));
-  right.appendChild(reviewBox);
+  const secRev = document.createElement('section');
+  secRev.className = 'detail-section detail-section--review';
+  secRev.appendChild(el('h3', 'detail-section-title', 'AI 中文点评'));
 
-  spread.append(left, right);
-  pagesWrap.appendChild(spread);
+  const pid = stablePaperId(paper);
+  const map = state.paperReviewsByDate[paper._date] || {};
+  const perPaper = pid && map[pid] ? String(map[pid]).trim() : '';
 
-  const coverOverlay = document.createElement('div');
-  coverOverlay.className = 'book-3d-cover-overlay';
-  const face = document.createElement('div');
-  face.className = `book-3d-cover-face tone-${toneFor(paper._tags[0])}`;
-  const ribbon = document.createElement('span');
-  ribbon.className = 'book-3d-ribbon';
-  ribbon.textContent = tagLabel(paper._tags[0] || 'Other');
-  const coverTitle = document.createElement('h3');
-  coverTitle.className = 'book-3d-cover-title';
-  coverTitle.textContent = paper.title || '论文';
-  const spine = document.createElement('div');
-  spine.className = 'book-3d-spine';
-  face.append(spine, ribbon, coverTitle);
+  const revP = document.createElement('p');
+  revP.className = 'detail-review-text';
+  const note = document.createElement('p');
+  note.className = 'detail-review-note muted';
+  if (perPaper) {
+    revP.textContent = perPaper;
+    note.textContent = '本篇独立生成的中文点评（键与 arXiv ID 或 URL 推导一致）。';
+  } else {
+    revP.textContent = review?.short || '这一天暂无 AI 总结；本篇也未收录单独点评。';
+    note.textContent =
+      '暂无本篇单独点评；展示的是当日左侧栏「总览摘要」节选。可用 scripts/generate-paper-reviews.mjs export / merge 写入 data/reviews（无需 API）。';
+  }
+  secRev.appendChild(revP);
+  secRev.appendChild(note);
 
-  const hint = document.createElement('p');
-  hint.className = 'book-3d-hint';
-  hint.textContent = '封面已翻开 · 左侧为信息与链接，右侧为摘要与点评';
-  face.appendChild(hint);
+  root.appendChild(secRev);
 
-  coverOverlay.appendChild(face);
+  reader.appendChild(root);
+  openPaperDrawer();
+}
 
-  book3d.append(pagesWrap, coverOverlay);
-  scene.appendChild(book3d);
-  reader.appendChild(scene);
-
-  requestAnimationFrame(() => {
-    book3d.classList.add('book-3d--open');
-  });
+function focusPaperDrawer() {
+  const panel = document.getElementById('paper-drawer-panel');
+  if (!panel) return;
+  try {
+    panel.focus({ preventScroll: true });
+  } catch {
+    panel.focus();
+  }
 }
 
 function linkButton(label, href) {
@@ -412,9 +496,69 @@ function setupReviewModal() {
   modal.querySelectorAll('[data-close-modal]').forEach((el) => {
     el.addEventListener('click', () => closeReviewModal());
   });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.hidden) closeReviewModal();
+}
+
+function setupPaperDrawer() {
+  const drawer = document.getElementById('paper-drawer');
+  if (!drawer) return;
+
+  drawer.querySelectorAll('[data-close-paper-drawer]').forEach((el) => {
+    el.addEventListener('click', () => closePaperDrawer());
   });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modal = document.getElementById('review-modal');
+    if (modal && !modal.hidden) {
+      closeReviewModal();
+      return;
+    }
+    if (document.documentElement.classList.contains('explorer-list-open')) {
+      document.documentElement.classList.remove('explorer-list-open');
+      return;
+    }
+    if (!drawer.hidden) closePaperDrawer();
+  });
+}
+
+function openPaperDrawer() {
+  const drawer = document.getElementById('paper-drawer');
+  if (!drawer) return;
+  clearTimeout(drawer._hideTimer);
+  drawer.hidden = false;
+  drawer.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('drawer-open');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => drawer.classList.add('is-open'));
+  });
+}
+
+function closePaperDrawer() {
+  const drawer = document.getElementById('paper-drawer');
+  if (!drawer) return;
+
+  const wasOpen = drawer.classList.contains('is-open') || !drawer.hidden;
+  drawer.classList.remove('is-open');
+  document.body.classList.remove('drawer-open');
+  state.activePaper = null;
+  document.querySelectorAll('.book-card').forEach((card) => card.classList.remove('active'));
+  const bodyEl = document.getElementById('paper-drawer-body');
+  if (bodyEl) bodyEl.innerHTML = '';
+  const titleEl = document.getElementById('paper-drawer-title');
+  if (titleEl) titleEl.textContent = '论文详情';
+
+  clearTimeout(drawer._hideTimer);
+  if (!wasOpen) {
+    drawer.hidden = true;
+    drawer.setAttribute('aria-hidden', 'true');
+    return;
+  }
+
+  drawer._hideTimer = setTimeout(() => {
+    if (drawer.classList.contains('is-open')) return;
+    drawer.hidden = true;
+    drawer.setAttribute('aria-hidden', 'true');
+  }, 320);
 }
 
 function openReviewModal(date) {
@@ -521,6 +665,22 @@ function appendWithBold(container, text) {
     } else {
       container.appendChild(document.createTextNode(parts[i]));
     }
+  }
+}
+
+async function loadPaperReviews(date) {
+  const url = `./data/reviews/${date}.json`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      delete state.paperReviewsByDate[date];
+      return;
+    }
+    const j = await res.json();
+    state.paperReviewsByDate[date] =
+      j.reviews && typeof j.reviews === 'object' ? j.reviews : {};
+  } catch {
+    delete state.paperReviewsByDate[date];
   }
 }
 
